@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"log"
 	"net/http"
 	"strings"
 
@@ -20,7 +21,9 @@ func main() {
 	flag.Parse()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/hydrators/token", HandleHydrateToken)
-	http.ListenAndServe(address, mux)
+	if err := http.ListenAndServe(address, mux); err != nil {
+		log.Fatalf("failed to start server: %s", err)
+	}
 }
 
 func HandleHydrateToken(w http.ResponseWriter, req *http.Request) {
