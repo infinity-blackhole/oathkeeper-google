@@ -2,31 +2,47 @@ package main
 
 import (
 	"encoding/json"
-	"flag"
 	"log"
 	"net/http"
 	"strings"
 
 	"github.com/ory/oathkeeper/pipeline/authn"
+	"github.com/spf13/cobra"
 	"google.golang.org/api/idtoken"
 )
 
+var rootCmd = &cobra.Command{
+	Use: "oathkeeper-google-hydrator",
+	Run: func(cmd *cobra.Command, args []string) {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/hydrators/token", HandleHydrateToken)
+		if err := http.ListenAndServe(address, mux); err != nil {
+			log.Fatalf("failed to start server: %s", err)
+		}
+	},
+}
+
 var address string
+var username string
+var password string
 
 func init() {
-	flag.StringVar(&address, "address", ":8080", "address to listen on")
+	rootCmd.Flags().StringVar(&address, "address", ":8080", "address to listen on")
+	rootCmd.Flags().StringVar(&username, "username", "oathkeeper", "username for oathkeeper hydrator authentication")
+	rootCmd.Flags().StringVar(&password, "password", "", "password for oathkeeper hydrator authentication")
+	rootCmd.MarkFlagRequired("password")
 }
 
 func main() {
-	flag.Parse()
-	mux := http.NewServeMux()
-	mux.HandleFunc("/hydrators/token", HandleHydrateToken)
-	if err := http.ListenAndServe(address, mux); err != nil {
-		log.Fatalf("failed to start server: %s", err)
-	}
+	log.Fatal(rootCmd.Execute())
 }
 
 func HandleHydrateToken(w http.ResponseWriter, req *http.Request) {
+	bau, bap, ok := req.BasicAuth()
+	if bau != username || bap != password || !ok {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
 	var as authn.AuthenticationSession
 	if err := json.NewDecoder(req.Body).Decode(&as); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
