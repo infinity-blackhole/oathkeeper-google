@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -38,29 +39,36 @@ func main() {
 }
 
 func HandleHydrateToken(w http.ResponseWriter, req *http.Request) {
-	bau, bap, ok := req.BasicAuth()
-	if bau != username || bap != password || !ok {
-		w.WriteHeader(http.StatusUnauthorized)
+	basicAuthUser, basicAuthPwd, ok := req.BasicAuth()
+	if !ok {
+		w.Header().Set("WWW-Authenticate", `Basic realm="restricted", charset="UTF-8"`)
+		http.Error(w, "Missing Basic Auth", http.StatusUnauthorized)
+		return
+	}
+	userCmp := subtle.ConstantTimeCompare([]byte(basicAuthUser), []byte(username))
+	passCmp := subtle.ConstantTimeCompare([]byte(basicAuthPwd), []byte(password))
+	if userCmp != 1 || passCmp != 1 {
+		http.Error(w, "Credentials mismatch", http.StatusUnauthorized)
 		return
 	}
 	var as authn.AuthenticationSession
 	if err := json.NewDecoder(req.Body).Decode(&as); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+		http.Error(w, "Masformed body", http.StatusBadRequest)
 		return
 	}
 	aud := req.URL.Query().Get("audience")
 	if aud == "" {
-		w.WriteHeader(http.StatusBadRequest)
+		http.Error(w, "Missing audience", http.StatusBadRequest)
 		return
 	}
 	ts, err := idtoken.NewTokenSource(req.Context(), aud)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, "Token source error", http.StatusInternalServerError)
 		return
 	}
 	t, err := ts.Token()
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, "Token fetch error", http.StatusInternalServerError)
 		return
 	}
 	as.SetHeader(
@@ -68,7 +76,7 @@ func HandleHydrateToken(w http.ResponseWriter, req *http.Request) {
 		strings.Join([]string{t.TokenType, t.AccessToken}, " "),
 	)
 	if err := json.NewEncoder(w).Encode(as); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, "Encoding error", http.StatusInternalServerError)
 		return
 	}
 }
