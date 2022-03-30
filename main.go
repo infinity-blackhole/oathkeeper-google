@@ -12,7 +12,7 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use: "oathkeeper-google-hydrator",
+	Use: "oathkeeper-google",
 	Run: func(cmd *cobra.Command, args []string) {
 		mux := http.NewServeMux()
 		mux.HandleFunc("/hydrators/token", HandleHydrateToken)

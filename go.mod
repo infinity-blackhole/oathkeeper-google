@@ -1,4 +1,4 @@
-module github.com/Shikanime/oathkeeper-google-mutator
+module github.com/Shikanime/oathkeeper-google
 
 go 1.13
 
