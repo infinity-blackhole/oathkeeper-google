@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"flag"
 	"net/http"
@@ -25,39 +24,32 @@ func main() {
 }
 
 func HandleHydrateToken(w http.ResponseWriter, req *http.Request) {
-	encoder := json.NewEncoder(w)
-	decoder := json.NewDecoder(req.Body)
-	w.WriteHeader(handleHydrateToken(encoder, decoder))
-}
-
-func handleHydrateToken(encoder *json.Encoder, decoder *json.Decoder) int {
 	var as authn.AuthenticationSession
-	if err := decoder.Decode(&as); err != nil {
-		return http.StatusBadRequest
+	if err := json.NewDecoder(req.Body).Decode(&as); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
 	}
-	aud, ok := as.Extra["audience"].(string)
-	if !ok {
-		return http.StatusBadRequest
+	aud := req.URL.Query().Get("audience")
+	if aud == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
 	}
-	tk, err := getIdToken(aud)
+	ts, err := idtoken.NewTokenSource(req.Context(), aud)
 	if err != nil {
-		return http.StatusInternalServerError
-	}
-	as.SetHeader("Authorization", tk)
-	if err := encoder.Encode(as); err != nil {
-		return http.StatusInternalServerError
-	}
-	return http.StatusOK
-}
-
-func getIdToken(audience string) (string, error) {
-	ts, err := idtoken.NewTokenSource(context.Background(), audience)
-	if err != nil {
-		return "", err
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 	t, err := ts.Token()
 	if err != nil {
-		return "", err
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
-	return strings.Join([]string{t.TokenType, t.AccessToken}, " "), nil
+	as.SetHeader(
+		"Authorization",
+		strings.Join([]string{t.TokenType, t.AccessToken}, " "),
+	)
+	if err := json.NewEncoder(w).Encode(as); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 }
