@@ -25,7 +25,7 @@ var rootCmd = &cobra.Command{
 		e.Use(middleware.Logger())
 		e.Use(middleware.Recover())
 		e.Use(middleware.BasicAuth(HandleBasicAuth))
-		e.GET("/hydrators/token", HandleHydrateToken)
+		e.POST("/hydrators/token", HandleHydrateToken)
 		if err := e.Start(address); err != nil {
 			log.Fatalf("failed to start server: %s", err)
 		}
