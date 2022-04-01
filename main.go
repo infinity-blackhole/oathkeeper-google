@@ -64,7 +64,7 @@ func HandleHydrateToken(c echo.Context) error {
 	}
 	as.SetHeader(
 		"Authorization",
-		strings.Join([]string{t.TokenType, t.AccessToken}, " "),
+		strings.Join([]string{strings.Title(t.TokenType), t.AccessToken}, " "),
 	)
 	return c.JSON(http.StatusOK, as)
 }
