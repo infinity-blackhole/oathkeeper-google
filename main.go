@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -25,7 +26,7 @@ var rootCmd = &cobra.Command{
 		e.Use(middleware.Logger())
 		e.Use(middleware.Recover())
 		e.Use(middleware.BasicAuth(HandleBasicAuth))
-		e.POST("/hydrators/token", HandleHydrateToken)
+		e.POST("/hydrators/token/audiences/:audience", HandleHydrateToken)
 		if err := e.Start(address); err != nil {
 			log.Fatalf("failed to start server: %s", err)
 		}
@@ -49,11 +50,11 @@ func HandleHydrateToken(c echo.Context) error {
 	if err := json.NewDecoder(req.Body).Decode(&as); err != nil {
 		return c.NoContent(http.StatusBadRequest)
 	}
-	aud := req.URL.Query().Get("audience")
-	if aud == "" {
+	aud, err := base64.URLEncoding.DecodeString(c.Param("audience"))
+	if err != nil {
 		return c.NoContent(http.StatusBadRequest)
 	}
-	ts, err := idtoken.NewTokenSource(req.Context(), aud)
+	ts, err := idtoken.NewTokenSource(req.Context(), string(aud))
 	if err != nil {
 		return c.NoContent(http.StatusInternalServerError)
 	}
