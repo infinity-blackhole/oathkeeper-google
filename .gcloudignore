@@ -15,3 +15,8 @@
 
 node_modules
 #!include:.gitignore
+
+# Nix
+flake.nix
+flake.lock
+shell.nix

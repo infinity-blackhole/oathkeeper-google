@@ -3,18 +3,26 @@ package oathkeepergoogle
 import (
 	"crypto/subtle"
 	"encoding/json"
+	"log"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/GoogleCloudPlatform/functions-framework-go/functions"
 	"github.com/ory/oathkeeper/pipeline/authn"
+	"github.com/ory/viper"
 	"google.golang.org/api/idtoken"
 )
 
 func init() {
-	username := os.Getenv("OATHKEEPER_GOOGLE_HYDRATOR_AUTH_BASIC_USERNAME")
-	password := os.Getenv("OATHKEEPER_GOOGLE_HYDRATOR_AUTH_BASIC_PASSWORD")
+	viper.AutomaticEnv()
+	username := viper.GetString("hydrator_auth_basic_username")
+	if username == "" {
+		log.Fatalf("hydrator_auth_basic_username is not set")
+	}
+	password := viper.GetString("hydrator_auth_basic_password")
+	if password == "" {
+		log.Fatalf("hydrator_auth_basic_password is not set")
+	}
 	hydratorHandler := HandleHydrateToken()
 	authHandler := HandleBasicAuth(username, password, hydratorHandler)
 	functions.HTTP("HydrateToken", authHandler.ServeHTTP)
@@ -24,22 +32,22 @@ func HandleHydrateToken() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var as authn.AuthenticationSession
 		if err := json.NewDecoder(r.Body).Decode(&as); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
+			http.Error(w, "Fail to decode body", http.StatusBadRequest)
 			return
 		}
 		aud := r.URL.Query().Get("audience")
 		if aud == "" {
-			w.WriteHeader(http.StatusBadRequest)
+			http.Error(w, "Missing Audience", http.StatusBadRequest)
 			return
 		}
 		ts, err := idtoken.NewTokenSource(r.Context(), aud)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
+			http.Error(w, "Fail to connect token source", http.StatusInternalServerError)
 			return
 		}
 		t, err := ts.Token()
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
+			http.Error(w, "Fail to generate new token", http.StatusInternalServerError)
 			return
 		}
 		as.SetHeader(
@@ -47,20 +55,22 @@ func HandleHydrateToken() http.Handler {
 			strings.Join([]string{t.TokenType, t.AccessToken}, " "),
 		)
 		if err := json.NewEncoder(w).Encode(as); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
+			http.Error(w, "Fail to encode response", http.StatusInternalServerError)
 		}
 	})
 }
 
 func HandleBasicAuth(username, password string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		qs := r.URL.Query()
-		u := qs.Get("username")
-		p := qs.Get("password")
+		u, p, ok := r.BasicAuth()
+		if !ok {
+			http.Error(w, "Missing Authorization", http.StatusUnauthorized)
+			return
+		}
 		ucmp := subtle.ConstantTimeCompare([]byte(u), []byte(username))
 		pcmp := subtle.ConstantTimeCompare([]byte(p), []byte(password))
 		if ucmp != 1 || pcmp != 1 {
-			w.WriteHeader(http.StatusUnauthorized)
+			http.Error(w, "Bad credentials", http.StatusUnauthorized)
 			return
 		}
 		next.ServeHTTP(w, r)
