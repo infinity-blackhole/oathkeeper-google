@@ -1,12 +1,13 @@
-module github.com/Shikanime/oathkeeper-google
+module github.com/infinity-blackhole/oathkeeper-google
 
 go 1.13
 
 require (
 	cloud.google.com/go/iam v0.3.0 // indirect
-	github.com/labstack/echo v3.3.10+incompatible
-	github.com/labstack/echo/v4 v4.7.2
+	github.com/GoogleCloudPlatform/functions-framework-go v1.5.3
+	github.com/mattn/go-colorable v0.1.11 // indirect
 	github.com/ory/oathkeeper v0.38.23-beta.1
-	github.com/spf13/cobra v1.1.1
+	golang.org/x/time v0.0.0-20201208040808-7e3f01d25324 // indirect
 	google.golang.org/api v0.73.0
+	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 )
