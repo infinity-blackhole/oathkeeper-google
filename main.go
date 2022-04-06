@@ -41,7 +41,9 @@ func init() {
 }
 
 func main() {
-	log.Fatal(rootCmd.Execute())
+	if err := rootCmd.Execute(); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func HandleHydrateToken(c echo.Context) error {
