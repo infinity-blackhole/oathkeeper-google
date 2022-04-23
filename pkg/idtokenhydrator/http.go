@@ -1,34 +1,16 @@
-package oathkeepergoogle
+package idtokenhydrator
 
 import (
 	"crypto/subtle"
 	"encoding/json"
-	"log"
 	"net/http"
 	"strings"
 
-	"github.com/GoogleCloudPlatform/functions-framework-go/functions"
 	"github.com/ory/oathkeeper/pipeline/authn"
-	"github.com/ory/viper"
 	"google.golang.org/api/idtoken"
 )
 
-func init() {
-	viper.AutomaticEnv()
-	username := viper.GetString("hydrator_auth_basic_username")
-	if username == "" {
-		log.Fatalf("hydrator_auth_basic_username is not set")
-	}
-	password := viper.GetString("hydrator_auth_basic_password")
-	if password == "" {
-		log.Fatalf("hydrator_auth_basic_password is not set")
-	}
-	hydratorHandler := HandleHydrateToken()
-	authHandler := HandleBasicAuth(username, password, hydratorHandler)
-	functions.HTTP("HydrateToken", authHandler.ServeHTTP)
-}
-
-func HandleHydrateToken() http.Handler {
+func TokenHydrator() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var as authn.AuthenticationSession
 		if err := json.NewDecoder(r.Body).Decode(&as); err != nil {
@@ -60,7 +42,7 @@ func HandleHydrateToken() http.Handler {
 	})
 }
 
-func HandleBasicAuth(username, password string, next http.Handler) http.Handler {
+func BasicAuth(username, password string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		u, p, ok := r.BasicAuth()
 		if !ok {
