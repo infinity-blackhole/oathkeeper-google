@@ -1,14 +1,19 @@
 package main
 
 import (
+	"bytes"
 	"crypto/subtle"
 	"encoding/json"
 	"log"
 	"net/http"
 	"strings"
+	"text/template"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/mitchellh/mapstructure"
+	"github.com/ory/oathkeeper/pipeline/authn"
+	"github.com/ory/oathkeeper/x"
 	"github.com/spf13/cobra"
 	"google.golang.org/api/idtoken"
 )
@@ -16,15 +21,20 @@ import (
 var address string
 var username string
 var password string
+var claims string
 
 var rootCmd = &cobra.Command{
 	Use: "oathkeeper-google",
 	Run: func(cmd *cobra.Command, args []string) {
+		tpl, err := x.NewTemplate("claims").Parse(claims)
+		if err != nil {
+			log.Fatal("failed to parse claims template: ", err)
+		}
 		e := echo.New()
 		e.Use(middleware.Logger())
 		e.Use(middleware.Recover())
-		e.Use(middleware.BasicAuth(HandleBasicAuth))
-		e.POST("/hydrators/token", HandleHydrateToken)
+		e.Use(middleware.BasicAuth(BasicAuthValidator))
+		e.POST("/hydrators/token", HydrateToken(tpl))
 		if err := e.Start(address); err != nil {
 			log.Fatalf("failed to start server: %s", err)
 		}
@@ -35,6 +45,7 @@ func init() {
 	rootCmd.Flags().StringVar(&address, "address", ":8080", "address to listen on")
 	rootCmd.Flags().StringVar(&username, "username", "oathkeeper", "username for oathkeeper hydrator authentication")
 	rootCmd.Flags().StringVar(&password, "password", "", "password for oathkeeper hydrator authentication")
+	rootCmd.Flags().StringVar(&claims, "claims", "{}", "go template for claims to be added to the token")
 	rootCmd.MarkFlagRequired("password")
 }
 
@@ -44,41 +55,49 @@ func main() {
 	}
 }
 
-func HandleHydrateToken(c echo.Context) error {
-	req := c.Request()
-	var as map[string]interface{}
-	if err := json.NewDecoder(req.Body).Decode(&as); err != nil {
-		return c.NoContent(http.StatusBadRequest)
+func HydrateToken(claimtpl *template.Template) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		req := c.Request()
+		var ras map[string]interface{}
+		if err := json.NewDecoder(req.Body).Decode(&ras); err != nil {
+			return c.NoContent(http.StatusBadRequest)
+		}
+		var as authn.AuthenticationSession
+		if err := mapstructure.Decode(ras, &as); err != nil {
+			return c.NoContent(http.StatusBadRequest)
+		}
+		var tpl bytes.Buffer
+		if err := claimtpl.Execute(&tpl, as); err != nil {
+			return c.NoContent(http.StatusInternalServerError)
+		}
+		var rres map[string]interface{}
+		if err := json.Unmarshal(tpl.Bytes(), &rres); err != nil {
+			return c.NoContent(http.StatusInternalServerError)
+		}
+		var res struct {
+			Audience string                 `mapstructure:"aud"`
+			Claims   map[string]interface{} `mapstructure:",remain"`
+		}
+		if err := mapstructure.Decode(rres, &res); err != nil {
+			return c.NoContent(http.StatusBadRequest)
+		}
+		ts, err := idtoken.NewTokenSource(req.Context(), string(res.Audience), idtoken.WithCustomClaims(res.Claims))
+		if err != nil {
+			return c.NoContent(http.StatusInternalServerError)
+		}
+		t, err := ts.Token()
+		if err != nil {
+			return c.NoContent(http.StatusInternalServerError)
+		}
+		as.SetHeader(
+			"Authorization",
+			strings.Join([]string{strings.Title(t.TokenType), t.AccessToken}, " "),
+		)
+		return c.JSON(http.StatusOK, as)
 	}
-	extra, ok := as["extra"].(map[string]interface{})
-	if !ok {
-		return c.NoContent(http.StatusBadRequest)
-	}
-	aud, ok := extra["audience"].(string)
-	if !ok {
-		return c.NoContent(http.StatusBadRequest)
-	}
-	claims, ok := extra["claims"].(map[string]interface{})
-	if !ok {
-		return c.NoContent(http.StatusBadRequest)
-	}
-	ts, err := idtoken.NewTokenSource(req.Context(), string(aud), idtoken.WithCustomClaims(claims))
-	if err != nil {
-		return c.NoContent(http.StatusInternalServerError)
-	}
-	t, err := ts.Token()
-	if err != nil {
-		return c.NoContent(http.StatusInternalServerError)
-	}
-	header, ok := as["header"].(map[string]interface{})
-	if !ok {
-		return c.NoContent(http.StatusBadRequest)
-	}
-	header["Authorization"] = strings.Join([]string{strings.Title(t.TokenType), t.AccessToken}, " ")
-	return c.JSON(http.StatusOK, as)
 }
 
-func HandleBasicAuth(u, p string, c echo.Context) (bool, error) {
+func BasicAuthValidator(u, p string, c echo.Context) (bool, error) {
 	userCmp := subtle.ConstantTimeCompare([]byte(u), []byte(username))
 	passCmp := subtle.ConstantTimeCompare([]byte(p), []byte(password))
 	return userCmp == 1 || passCmp == 1, nil
