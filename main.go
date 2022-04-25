@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/subtle"
-	"encoding/base64"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-	"github.com/ory/oathkeeper/pipeline/authn"
 	"github.com/spf13/cobra"
 	"google.golang.org/api/idtoken"
 )
@@ -26,7 +24,7 @@ var rootCmd = &cobra.Command{
 		e.Use(middleware.Logger())
 		e.Use(middleware.Recover())
 		e.Use(middleware.BasicAuth(HandleBasicAuth))
-		e.POST("/hydrators/token/audiences/:audience", HandleHydrateToken)
+		e.POST("/hydrators/token", HandleHydrateToken)
 		if err := e.Start(address); err != nil {
 			log.Fatalf("failed to start server: %s", err)
 		}
@@ -48,15 +46,23 @@ func main() {
 
 func HandleHydrateToken(c echo.Context) error {
 	req := c.Request()
-	var as authn.AuthenticationSession
+	var as map[string]interface{}
 	if err := json.NewDecoder(req.Body).Decode(&as); err != nil {
 		return c.NoContent(http.StatusBadRequest)
 	}
-	aud, err := base64.URLEncoding.DecodeString(c.Param("audience"))
-	if err != nil {
+	extra, ok := as["extra"].(map[string]interface{})
+	if !ok {
 		return c.NoContent(http.StatusBadRequest)
 	}
-	ts, err := idtoken.NewTokenSource(req.Context(), string(aud))
+	aud, ok := extra["audience"].(string)
+	if !ok {
+		return c.NoContent(http.StatusBadRequest)
+	}
+	claims, ok := extra["claims"].(map[string]interface{})
+	if !ok {
+		return c.NoContent(http.StatusBadRequest)
+	}
+	ts, err := idtoken.NewTokenSource(req.Context(), string(aud), idtoken.WithCustomClaims(claims))
 	if err != nil {
 		return c.NoContent(http.StatusInternalServerError)
 	}
@@ -64,10 +70,11 @@ func HandleHydrateToken(c echo.Context) error {
 	if err != nil {
 		return c.NoContent(http.StatusInternalServerError)
 	}
-	as.SetHeader(
-		"Authorization",
-		strings.Join([]string{strings.Title(t.TokenType), t.AccessToken}, " "),
-	)
+	header, ok := as["header"].(map[string]interface{})
+	if !ok {
+		return c.NoContent(http.StatusBadRequest)
+	}
+	header["Authorization"] = strings.Join([]string{strings.Title(t.TokenType), t.AccessToken}, " ")
 	return c.JSON(http.StatusOK, as)
 }
 
