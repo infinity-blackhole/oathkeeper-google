@@ -15,7 +15,9 @@ import (
 	"github.com/ory/oathkeeper/pipeline/authn"
 	"github.com/ory/oathkeeper/x"
 	"github.com/spf13/cobra"
+	"golang.org/x/oauth2/google"
 	"google.golang.org/api/idtoken"
+	"google.golang.org/api/option"
 )
 
 var address string
@@ -60,6 +62,7 @@ func main() {
 func HydrateToken(claimtpl *template.Template) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		req := c.Request()
+		ctx := req.Context()
 		var ras map[string]interface{}
 		if err := json.NewDecoder(req.Body).Decode(&ras); err != nil {
 			return c.NoContent(http.StatusBadRequest)
@@ -83,7 +86,11 @@ func HydrateToken(claimtpl *template.Template) echo.HandlerFunc {
 		if err := mapstructure.Decode(rres, &res); err != nil {
 			return c.NoContent(http.StatusBadRequest)
 		}
-		ts, err := idtoken.NewTokenSource(req.Context(), string(res.Audience), idtoken.WithCustomClaims(res.Claims))
+		creds, err := google.FindDefaultCredentials(ctx)
+		if err != nil {
+			return c.NoContent(http.StatusInternalServerError)
+		}
+		ts, err := idtoken.NewTokenSource(ctx, res.Audience, option.WithCredentials(creds))
 		if err != nil {
 			return c.NoContent(http.StatusInternalServerError)
 		}
