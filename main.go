@@ -63,12 +63,8 @@ func HydrateToken(claimtpl *template.Template) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		req := c.Request()
 		ctx := req.Context()
-		var ras map[string]interface{}
-		if err := json.NewDecoder(req.Body).Decode(&ras); err != nil {
-			return c.NoContent(http.StatusBadRequest)
-		}
 		var as authn.AuthenticationSession
-		if err := mapstructure.Decode(ras, &as); err != nil {
+		if err := json.NewDecoder(req.Body).Decode(&as); err != nil {
 			return c.NoContent(http.StatusBadRequest)
 		}
 		var tpl bytes.Buffer
