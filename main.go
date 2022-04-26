@@ -31,6 +31,8 @@ var rootCmd = &cobra.Command{
 			log.Fatal("failed to parse claims template: ", err)
 		}
 		e := echo.New()
+		e.HideBanner = true
+		e.HidePort = true
 		e.Use(middleware.Logger())
 		e.Use(middleware.Recover())
 		e.Use(middleware.BasicAuth(BasicAuthValidator))

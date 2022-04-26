@@ -8,5 +8,6 @@ require (
 	github.com/mitchellh/mapstructure v1.3.2
 	github.com/ory/oathkeeper v0.38.23-beta.1
 	github.com/spf13/cobra v1.1.1
+	golang.org/x/oauth2 v0.0.0-20220309155454-6242fa91716a
 	google.golang.org/api v0.73.0
 )
