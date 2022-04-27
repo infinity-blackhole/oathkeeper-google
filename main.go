@@ -76,8 +76,8 @@ func HydrateToken(claimtpl *template.Template) echo.HandlerFunc {
 			return c.NoContent(http.StatusInternalServerError)
 		}
 		var res struct {
-			Audience string                 `mapstructure:"aud"`
-			Claims   map[string]interface{} `mapstructure:",remain"`
+			Audiences []string               `mapstructure:"aud"`
+			Claims    map[string]interface{} `mapstructure:",remain"`
 		}
 		if err := mapstructure.Decode(rres, &res); err != nil {
 			return c.NoContent(http.StatusBadRequest)
@@ -86,7 +86,7 @@ func HydrateToken(claimtpl *template.Template) echo.HandlerFunc {
 		if err != nil {
 			return c.NoContent(http.StatusInternalServerError)
 		}
-		ts, err := idtoken.NewTokenSource(ctx, res.Audience, option.WithCredentials(creds))
+		ts, err := idtoken.NewTokenSource(ctx, res.Audiences[0], option.WithAudiences(res.Audiences...), option.WithCredentials(creds))
 		if err != nil {
 			return c.NoContent(http.StatusInternalServerError)
 		}
